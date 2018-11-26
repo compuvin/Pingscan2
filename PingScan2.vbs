@@ -1,6 +1,7 @@
 set filesys=CreateObject("Scripting.FileSystemObject")
 Dim strCurDir
 strCurDir = filesys.GetParentFolderName(Wscript.ScriptFullName)
+Dim OIUdata 'Data from MAC address CSV file
 Dim CSVdata 'Data from CSV
 Dim outputl 'Email body
 Dim adoconn
@@ -73,6 +74,14 @@ else
 	WriteIni strCurDir & "\psapp.ini", "WebGUI", "EditURL", EditURL
 end if
 
+'Check to see if MAC address table exists and if so, use it
+If filesys.FileExists(strCurDir & "\oui.csv") then
+	OIUdata = getfile(strCurDir & "\oui.csv")
+	OIUdata = replace(OIUdata,"'","") 'Replace any single quotes in the MAC address CSV as the database doesn't like them
+else
+	OIUdata = ""
+end if
+
 'Make Powershell Script and run it
 MakePSScript
 Set objShell = Wscript.CreateObject("Wscript.Shell") 
@@ -119,6 +128,7 @@ End Function
 
 Function Get_PingScan_Data()
 	Dim PingIPAdd, PingHost, PingMAC 'The three columns from the scan
+	Dim HWType, OIUQTH 'Manufacturer of the network equipment scanned
 	Dim TrustedChange 'Temporary holding text for trusted computers that change IP
 	
 	TrustedChange = ""
@@ -164,7 +174,19 @@ Function Get_PingScan_Data()
 			else
 				if rs("HostName") = "unknown" and not PingHost = "unknown" then rs("HostName") = PingHost
 			end if
-			'rs("HWType") = "Unknown" 'Type based on MAC later maybe??
+			'If hardware type was priviously unknown look it up again
+			if rs("HWType") = "Unknown" then
+				OIUQTH = instr(1,OIUdata,left(replace(PingMAC,"-",""),6),1)
+				if OIUQTH > 0 then
+					if mid(OIUdata,OIUQTH+6,2) =  ",""" then
+						'msgbox "Quote: " & mid(OIUdata,OIUQTH+8,instr(OIUQTH+8,OIUdata,""",",1)-OIUQTH-8)
+						rs("HWType") = mid(OIUdata,OIUQTH+8,instr(OIUQTH+8,OIUdata,""",",1)-OIUQTH-8)
+					else
+						'msgbox "Comma: " & mid(OIUdata,OIUQTH+7,instr(OIUQTH+7,OIUdata,",",1)-OIUQTH-7)
+						rs("HWType") = mid(OIUdata,OIUQTH+7,instr(OIUQTH+7,OIUdata,",",1)-OIUQTH-7)
+					end if
+				end if
+			end if
 			if rs("HWTrusted") = "N" and rs("PingStatus") = "N" then 'If an untrusted device comes back on the network
 				if EditURL = "" then
 					outputl = outputl & vbCrlf & vbCrlf & "<br><br>IP: " & PingIPAdd & vbCrlf & "<br>Name: <b>" & rs("HostName") & vbCrlf & "</b><br>MAC: " & PingMAC & vbCrlf & "<br>Type: " & rs("HWType")
@@ -181,13 +203,27 @@ Function Get_PingScan_Data()
 			rs.close
 		else
 			rs.close
-			str = "INSERT INTO pingscan2(PingMAC,PingIP,HostName,HWType,FirstDate,LastDate,LastTime,PingStatus,HWTrusted,LocalBuilding,NearPhone) values('" & PingMAC & "','" & PingIPAdd & "','" & PingHost & "','Unknown','" & format(date(), "YYYY-MM-DD") & "','" & format(date(), "YYYY-MM-DD") & "','" & format(Time, "HH:MM:SS") & "','Y','N','" & Building & "','');"
+			
+			OIUQTH = instr(1,OIUdata,left(replace(PingMAC,"-",""),6),1)
+			if OIUQTH > 0 then
+				if mid(OIUdata,OIUQTH+6,2) =  ",""" then
+					'msgbox "Quote: " & mid(OIUdata,OIUQTH+8,instr(OIUQTH+8,OIUdata,""",",1)-OIUQTH-8)
+					HWType = mid(OIUdata,OIUQTH+8,instr(OIUQTH+8,OIUdata,""",",1)-OIUQTH-8)
+				else
+					'msgbox "Comma: " & mid(OIUdata,OIUQTH+7,instr(OIUQTH+7,OIUdata,",",1)-OIUQTH-7)
+					HWType = mid(OIUdata,OIUQTH+7,instr(OIUQTH+7,OIUdata,",",1)-OIUQTH-7)
+				end if
+			else
+				HWType = "Unknown"
+			end if
+			
+			str = "INSERT INTO pingscan2(PingMAC,PingIP,HostName,HWType,FirstDate,LastDate,LastTime,PingStatus,HWTrusted,LocalBuilding,NearPhone) values('" & PingMAC & "','" & PingIPAdd & "','" & PingHost & "','" & HWType & "','" & format(date(), "YYYY-MM-DD") & "','" & format(date(), "YYYY-MM-DD") & "','" & format(Time, "HH:MM:SS") & "','Y','N','" & Building & "','');"
 			adoconn.Execute(str)
 			
 			if EditURL = "" then
-					outputl = outputl & vbCrlf & vbCrlf & "<br><br>IP: " & PingIPAdd & vbCrlf & "<br>Name: <b>" & PingHost & vbCrlf & "</b><br>MAC: " & PingMAC & vbCrlf & "<br>Type: Unknown"
+					outputl = outputl & vbCrlf & vbCrlf & "<br><br>IP: " & PingIPAdd & vbCrlf & "<br>Name: <b>" & PingHost & vbCrlf & "</b><br>MAC: " & PingMAC & vbCrlf & "<br>Type: " & HWType
 				else
-					outputl = outputl & vbCrlf & vbCrlf & "<br><br>IP: " & PingIPAdd & vbCrlf & "<br>Name: <b>" & PingHost & vbCrlf & "</b><br>MAC: " & PingMAC & vbCrlf & "<br>Type: Unknown" & vbCrlf & "<br><br><a href=""" & EditURL & PingMAC & """>Click here to edit</a>"
+					outputl = outputl & vbCrlf & vbCrlf & "<br><br>IP: " & PingIPAdd & vbCrlf & "<br>Name: <b>" & PingHost & vbCrlf & "</b><br>MAC: " & PingMAC & vbCrlf & "<br>Type: " & HWType & vbCrlf & "<br><br><a href=""" & EditURL & PingMAC & """>Click here to edit</a>"
 				end if
 		end if
 	Loop
