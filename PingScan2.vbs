@@ -30,6 +30,7 @@ If filesys.FileExists(strCurDir & "\psapp.ini") then
 	SubnetStart = ReadIni(strCurDir & "\psapp.ini", "LocationSpecific", "SubnetStart" )
 	SubnetEnd = ReadIni(strCurDir & "\psapp.ini", "LocationSpecific", "SubnetEnd" )
 	DaysBeforeUntrusted = ReadIni(strCurDir & "\psapp.ini", "LocationSpecific", "DaysBeforeUntrusted" )
+	PingExceptions = ReadIni(strCurDir & "\psapp.ini", "LocationSpecific", "PingExceptions" ) 'Manually add this entry to ini file if needed. MAC Addresses should be pipe separated.
 	
 	'WebGUI
 	EditURL = ReadIni(strCurDir & "\psapp.ini", "WebGUI", "EditURL" )
@@ -159,72 +160,74 @@ Function Get_PingScan_Data()
 		'msgbox PingMAC
 		'msgbox """" & left(CSVdata,50) & """"
 		
-		str = "Select * from pingscan2 where PingMAC='" & PingMAC & "';"
-		rs.CursorLocation = 3 'adUseClient
-		rs.Open str, adoconn, 3, 3 'OpenType, LockType
-		
-		if not rs.eof then
-			rs.MoveFirst
-			if not rs("PingIP") = PingIPAdd and rs("HWTrusted") = "Y" then 'if a trusted computer changes it's IP
-				TrustedChange = TrustedChange & vbCrlf & vbCrlf & "<br><br>IP: " & PingIPAdd & " (" & Building & ")<br>Previous IP: " & rs("IP") & " (" & rs("LocalBuilding") & ")<br>Name: <b>" & rs("HostName") & vbCrlf & "</b><br>MAC: " & PingMAC & vbCrlf & "<br>Type: " & rs("HWType")
-			end if
-			rs("PingIP") = PingIPAdd
-			if len(rs("HostName") & "") = 0 then
-				rs("HostName") = PingHost
+		if instr(1,PingExceptions,PingMAC,1) = 0 then 'Ignore any device exceptions
+			str = "Select * from pingscan2 where PingMAC='" & PingMAC & "';"
+			rs.CursorLocation = 3 'adUseClient
+			rs.Open str, adoconn, 3, 3 'OpenType, LockType
+			
+			if not rs.eof then
+				rs.MoveFirst
+				if not rs("PingIP") = PingIPAdd and rs("HWTrusted") = "Y" then 'if a trusted computer changes it's IP
+					TrustedChange = TrustedChange & vbCrlf & vbCrlf & "<br><br>IP: " & PingIPAdd & " (" & Building & ")<br>Previous IP: " & rs("PingIP") & " (" & rs("LocalBuilding") & ")<br>Name: <b>" & rs("HostName") & vbCrlf & "</b><br>MAC: " & PingMAC & vbCrlf & "<br>Type: " & rs("HWType")
+				end if
+				rs("PingIP") = PingIPAdd
+				if len(rs("HostName") & "") = 0 then
+					rs("HostName") = PingHost
+				else
+					if rs("HostName") = "unknown" and not PingHost = "unknown" then rs("HostName") = PingHost
+				end if
+				'If hardware type was priviously unknown look it up again
+				if rs("HWType") = "Unknown" then
+					OIUQTH = instr(1,OIUdata,left(replace(PingMAC,"-",""),6),1)
+					if OIUQTH > 0 then
+						if mid(OIUdata,OIUQTH+6,2) =  ",""" then
+							'msgbox "Quote: " & mid(OIUdata,OIUQTH+8,instr(OIUQTH+8,OIUdata,""",",1)-OIUQTH-8)
+							rs("HWType") = mid(OIUdata,OIUQTH+8,instr(OIUQTH+8,OIUdata,""",",1)-OIUQTH-8)
+						else
+							'msgbox "Comma: " & mid(OIUdata,OIUQTH+7,instr(OIUQTH+7,OIUdata,",",1)-OIUQTH-7)
+							rs("HWType") = mid(OIUdata,OIUQTH+7,instr(OIUQTH+7,OIUdata,",",1)-OIUQTH-7)
+						end if
+					end if
+				end if
+				if rs("HWTrusted") = "N" and rs("PingStatus") = "N" then 'If an untrusted device comes back on the network
+					if EditURL = "" then
+						outputl = outputl & vbCrlf & vbCrlf & "<br><br>IP: " & PingIPAdd & vbCrlf & "<br>Name: <b>" & rs("HostName") & vbCrlf & "</b><br>MAC: " & PingMAC & vbCrlf & "<br>Type: " & rs("HWType")
+					else
+						outputl = outputl & vbCrlf & vbCrlf & "<br><br>IP: " & PingIPAdd & vbCrlf & "<br>Name: <b>" & rs("HostName") & vbCrlf & "</b><br>MAC: " & PingMAC & vbCrlf & "<br>Type: " & rs("HWType") & vbCrlf & "<br><br><a href=""" & EditURL & PingMAC & """>Click here to edit</a>"
+					end if
+				end if
+				rs("PingStatus") = "Y"
+				rs("LastDate") = format(date(), "YYYY-MM-DD")
+				rs("LastTime") = format(Time, "HH:MM:SS")
+				rs("LocalBuilding") = Building
+				
+				rs.Update
+				rs.close
 			else
-				if rs("HostName") = "unknown" and not PingHost = "unknown" then rs("HostName") = PingHost
-			end if
-			'If hardware type was priviously unknown look it up again
-			if rs("HWType") = "Unknown" then
+				rs.close
+				
 				OIUQTH = instr(1,OIUdata,left(replace(PingMAC,"-",""),6),1)
 				if OIUQTH > 0 then
 					if mid(OIUdata,OIUQTH+6,2) =  ",""" then
 						'msgbox "Quote: " & mid(OIUdata,OIUQTH+8,instr(OIUQTH+8,OIUdata,""",",1)-OIUQTH-8)
-						rs("HWType") = mid(OIUdata,OIUQTH+8,instr(OIUQTH+8,OIUdata,""",",1)-OIUQTH-8)
+						HWType = mid(OIUdata,OIUQTH+8,instr(OIUQTH+8,OIUdata,""",",1)-OIUQTH-8)
 					else
 						'msgbox "Comma: " & mid(OIUdata,OIUQTH+7,instr(OIUQTH+7,OIUdata,",",1)-OIUQTH-7)
-						rs("HWType") = mid(OIUdata,OIUQTH+7,instr(OIUQTH+7,OIUdata,",",1)-OIUQTH-7)
+						HWType = mid(OIUdata,OIUQTH+7,instr(OIUQTH+7,OIUdata,",",1)-OIUQTH-7)
 					end if
+				else
+					HWType = "Unknown"
 				end if
-			end if
-			if rs("HWTrusted") = "N" and rs("PingStatus") = "N" then 'If an untrusted device comes back on the network
+				
+				str = "INSERT INTO pingscan2(PingMAC,PingIP,HostName,HWType,FirstDate,LastDate,LastTime,PingStatus,HWTrusted,LocalBuilding,NearPhone) values('" & PingMAC & "','" & PingIPAdd & "','" & PingHost & "','" & HWType & "','" & format(date(), "YYYY-MM-DD") & "','" & format(date(), "YYYY-MM-DD") & "','" & format(Time, "HH:MM:SS") & "','Y','N','" & Building & "','');"
+				adoconn.Execute(str)
+				
 				if EditURL = "" then
-					outputl = outputl & vbCrlf & vbCrlf & "<br><br>IP: " & PingIPAdd & vbCrlf & "<br>Name: <b>" & rs("HostName") & vbCrlf & "</b><br>MAC: " & PingMAC & vbCrlf & "<br>Type: " & rs("HWType")
-				else
-					outputl = outputl & vbCrlf & vbCrlf & "<br><br>IP: " & PingIPAdd & vbCrlf & "<br>Name: <b>" & rs("HostName") & vbCrlf & "</b><br>MAC: " & PingMAC & vbCrlf & "<br>Type: " & rs("HWType") & vbCrlf & "<br><br><a href=""" & EditURL & PingMAC & """>Click here to edit</a>"
-				end if
+						outputl = outputl & vbCrlf & vbCrlf & "<br><br>IP: " & PingIPAdd & vbCrlf & "<br>Name: <b>" & PingHost & vbCrlf & "</b><br>MAC: " & PingMAC & vbCrlf & "<br>Type: " & HWType
+					else
+						outputl = outputl & vbCrlf & vbCrlf & "<br><br>IP: " & PingIPAdd & vbCrlf & "<br>Name: <b>" & PingHost & vbCrlf & "</b><br>MAC: " & PingMAC & vbCrlf & "<br>Type: " & HWType & vbCrlf & "<br><br><a href=""" & EditURL & PingMAC & """>Click here to edit</a>"
+					end if
 			end if
-			rs("PingStatus") = "Y"
-			rs("LastDate") = format(date(), "YYYY-MM-DD")
-			rs("LastTime") = format(Time, "HH:MM:SS")
-			rs("LocalBuilding") = Building
-			
-			rs.Update
-			rs.close
-		else
-			rs.close
-			
-			OIUQTH = instr(1,OIUdata,left(replace(PingMAC,"-",""),6),1)
-			if OIUQTH > 0 then
-				if mid(OIUdata,OIUQTH+6,2) =  ",""" then
-					'msgbox "Quote: " & mid(OIUdata,OIUQTH+8,instr(OIUQTH+8,OIUdata,""",",1)-OIUQTH-8)
-					HWType = mid(OIUdata,OIUQTH+8,instr(OIUQTH+8,OIUdata,""",",1)-OIUQTH-8)
-				else
-					'msgbox "Comma: " & mid(OIUdata,OIUQTH+7,instr(OIUQTH+7,OIUdata,",",1)-OIUQTH-7)
-					HWType = mid(OIUdata,OIUQTH+7,instr(OIUQTH+7,OIUdata,",",1)-OIUQTH-7)
-				end if
-			else
-				HWType = "Unknown"
-			end if
-			
-			str = "INSERT INTO pingscan2(PingMAC,PingIP,HostName,HWType,FirstDate,LastDate,LastTime,PingStatus,HWTrusted,LocalBuilding,NearPhone) values('" & PingMAC & "','" & PingIPAdd & "','" & PingHost & "','" & HWType & "','" & format(date(), "YYYY-MM-DD") & "','" & format(date(), "YYYY-MM-DD") & "','" & format(Time, "HH:MM:SS") & "','Y','N','" & Building & "','');"
-			adoconn.Execute(str)
-			
-			if EditURL = "" then
-					outputl = outputl & vbCrlf & vbCrlf & "<br><br>IP: " & PingIPAdd & vbCrlf & "<br>Name: <b>" & PingHost & vbCrlf & "</b><br>MAC: " & PingMAC & vbCrlf & "<br>Type: " & HWType
-				else
-					outputl = outputl & vbCrlf & vbCrlf & "<br><br>IP: " & PingIPAdd & vbCrlf & "<br>Name: <b>" & PingHost & vbCrlf & "</b><br>MAC: " & PingMAC & vbCrlf & "<br>Type: " & HWType & vbCrlf & "<br><br><a href=""" & EditURL & PingMAC & """>Click here to edit</a>"
-				end if
 		end if
 	Loop
 	
