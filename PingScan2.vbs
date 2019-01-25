@@ -160,7 +160,12 @@ Function Get_PingScan_Data()
 		'msgbox PingMAC
 		'msgbox """" & left(CSVdata,50) & """"
 		
-		if instr(1,PingExceptions,PingMAC,1) = 0 then 'Ignore any device exceptions
+		if PingMAC = "unknown" then 'Don't add unknown MAC addresses to the table because that's the primary key
+			outputl = "<html><head> <style>BODY{font-family: Arial; font-size: 10pt;}</style> </head><body> The MAC address was unresolved for the following device that is now active on the <b>" & Building & "</b> network. The device was not added to the database but will continue to trigger this alert for security reasons. Details below:"
+			outputl = outputl & vbCrlf & vbCrlf & "<br><br>IP: " & PingIPAdd & vbCrlf & "<br>Name: <b>" & PingHost & vbCrlf & "</b><br>MAC: " & PingMAC & vbCrlf & "<br>Type: Unknown"
+			SendMail RptToEmail, "PingScan - Unknown MAC Address for Device"
+			outputl = ""
+		elseif instr(1,PingExceptions,PingMAC,1) = 0 then 'Ignore any device exceptions
 			str = "Select * from pingscan2 where PingMAC='" & PingMAC & "';"
 			rs.CursorLocation = 3 'adUseClient
 			rs.Open str, adoconn, 3, 3 'OpenType, LockType
@@ -223,10 +228,10 @@ Function Get_PingScan_Data()
 				adoconn.Execute(str)
 				
 				if EditURL = "" then
-						outputl = outputl & vbCrlf & vbCrlf & "<br><br>IP: " & PingIPAdd & vbCrlf & "<br>Name: <b>" & PingHost & vbCrlf & "</b><br>MAC: " & PingMAC & vbCrlf & "<br>Type: " & HWType
-					else
-						outputl = outputl & vbCrlf & vbCrlf & "<br><br>IP: " & PingIPAdd & vbCrlf & "<br>Name: <b>" & PingHost & vbCrlf & "</b><br>MAC: " & PingMAC & vbCrlf & "<br>Type: " & HWType & vbCrlf & "<br><br><a href=""" & EditURL & PingMAC & """>Click here to edit</a>"
-					end if
+					outputl = outputl & vbCrlf & vbCrlf & "<br><br>IP: " & PingIPAdd & vbCrlf & "<br>Name: <b>" & PingHost & vbCrlf & "</b><br>MAC: " & PingMAC & vbCrlf & "<br>Type: " & HWType
+				else
+					outputl = outputl & vbCrlf & vbCrlf & "<br><br>IP: " & PingIPAdd & vbCrlf & "<br>Name: <b>" & PingHost & vbCrlf & "</b><br>MAC: " & PingMAC & vbCrlf & "<br>Type: " & HWType & vbCrlf & "<br><br><a href=""" & EditURL & PingMAC & """>Click here to edit</a>"
+				end if
 			end if
 		end if
 	Loop
