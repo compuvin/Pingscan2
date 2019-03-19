@@ -1,12 +1,15 @@
 set filesys=CreateObject("Scripting.FileSystemObject")
 Dim strCurDir
 strCurDir = filesys.GetParentFolderName(Wscript.ScriptFullName)
+set xmlhttp = createobject("msxml2.xmlhttp.3.0")
+dim WPData 'Web page text - for MAC address CSV
 Dim OIUdata 'Data from MAC address CSV file
 Dim CSVdata 'Data from CSV
 Dim outputl 'Email body
 Dim adoconn
 Dim rs
 Dim str
+Dim i 'Counter
 
 outputl = ""
 
@@ -77,11 +80,28 @@ end if
 
 'Check to see if MAC address table exists and if so, use it
 If filesys.FileExists(strCurDir & "\oui.csv") then
-	OIUdata = getfile(strCurDir & "\oui.csv")
+	OIUdata = ReadUTF(strCurDir & "\oui.csv")
 	OIUdata = replace(OIUdata,"'","") 'Replace any single quotes in the MAC address CSV as the database doesn't like them
 else
 	OIUdata = ""
 end if
+
+'If option is selected, check the MAC address CSV for updates
+if OIUdata <> "" then
+	xmlhttp.open "get", "http://standards-oui.ieee.org/oui/oui.csv", false
+	xmlhttp.send
+	WPData = xmlhttp.responseText
+	
+	if replace(WPData,"'","") = OIUdata then
+		msgbox "Awesome!"
+	else
+		msgbox len(OIUdata) & " --> " & len(WPData)
+		msgbox left(WPData,50)
+		WriteUTF strCurDir & "\oui.csv", WPData
+	end if
+end if
+
+msgbox "This is the last stop"
 
 'Make Powershell Script and run it
 MakePSScript
@@ -559,6 +579,28 @@ function WriteFile(FileName, Contents)
   Set FS = CreateObject("Scripting.FileSystemObject")
     Set OutStream = FS.OpenTextFile(FileName, 2, True)
     OutStream.Write Contents
+End Function
+
+'Read UTF file
+Function ReadUTF(FileName)
+	Dim objStream
+	Set objStream = CreateObject("ADODB.Stream")
+	
+	objStream.CharSet = "utf-8"
+	objStream.Open
+	objStream.LoadFromFile(FileName)
+	ReadUTF = objStream.ReadText()
+End Function
+
+'Write UTF file
+Function WriteUTF(FileName, Contents)
+	Dim objStream
+	Set objStream = CreateObject("ADODB.Stream")
+	
+	objStream.CharSet = "utf-8"
+	objStream.Open
+	objStream.WriteText Contents
+	objStream.SaveToFile FileName, 2
 End Function
 
 Function ReadIni( myFilePath, mySection, myKey ) 'Thanks to http://www.robvanderwoude.com
