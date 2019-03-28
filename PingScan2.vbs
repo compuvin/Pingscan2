@@ -10,6 +10,7 @@ Dim adoconn
 Dim rs
 Dim str
 Dim i 'Counter
+Dim Response 'For answers to prompts
 
 outputl = ""
 
@@ -27,7 +28,7 @@ If filesys.FileExists(strCurDir & "\psapp.ini") then
 	EmailSvr = ReadIni(strCurDir & "\psapp.ini", "Email", "EmailSvr" )
 	'Additional email settings found in Function SendMail()
 	
-	'Location Specific infromation for scanning
+	'Location Specific information for scanning
 	Building = ReadIni(strCurDir & "\psapp.ini", "LocationSpecific", "Building" )
 	SubnetDotZero = ReadIni(strCurDir & "\psapp.ini", "LocationSpecific", "SubnetDotZero" )
 	SubnetStart = ReadIni(strCurDir & "\psapp.ini", "LocationSpecific", "SubnetStart" )
@@ -37,11 +38,17 @@ If filesys.FileExists(strCurDir & "\psapp.ini") then
 	
 	'WebGUI
 	EditURL = ReadIni(strCurDir & "\psapp.ini", "WebGUI", "EditURL" )
+	
+	'MAC CSV (aka OUI.CSV)
+	ConsistencyMAC = ucase(ReadIni(strCurDir & "\psapp.ini", "MACCSV", "ConsistencyMAC" ))
+	OUIURL = ReadIni(strCurDir & "\psapp.ini", "MACCSV", "OUIURL" )
+	OUIUpdateAfter = ReadIni(strCurDir & "\psapp.ini", "MACCSV", "OUIUpdateAfter" )
+	OUIDaysToUpdate = ReadIni(strCurDir & "\psapp.ini", "MACCSV", "OUIDaysToUpdate" )
 else
 	msgbox "INI file not found at: " & strCurDir & "\psapp.ini" & vbCrlf & "You will now be prompted with questions to create it."
 	
 	'Database
-	CSVPath = inputbox("Enter the location where the CSV file with the software dump can be found (UNC path recommended):", "Software Matrix", strCurDir & "\PingScan.csv")
+	CSVPath = inputbox("Enter the location where the PingScan data should be saved during processing (UNC path recommended):", "Software Matrix", strCurDir & "\PingScan.csv")
 	DBLocation = inputbox("Enter the IP address or hostname for the location of the database:", "Software Matrix", "localhost")
 	DBUser = inputbox("Enter the user name to access database on " & DBLocation & ":", "Software Matrix", "user")
 	DBPass = inputbox("Enter the password to access database on " & DBLocation & ":", "Software Matrix", "P@ssword1")
@@ -52,7 +59,7 @@ else
 	EmailSvr = inputbox("Enter the FQDN or IP address of email server:", "Software Matrix", "mail.server.com")
 	msgbox "Additional email settings found in Function SendMail()"
 	
-	'Location Specific infromation for scanning
+	'Location Specific information for scanning
 	Building = inputbox("Enter the location (or building) of this scanner:", "Software Matrix", "Main Office")
 	SubnetDotZero = inputbox("Enter the subnet IP address to scan ending in zero (0):", "Software Matrix", "192.168.1.0")
 	SubnetStart = inputbox("Enter the first IP to scan (last octet only):", "Software Matrix", "1")
@@ -61,6 +68,28 @@ else
 	
 	'WebGUI
 	EditURL = inputbox("Enter the URL to be used for editing a devices details (public version not available yet so this can be left blank):", "Software Matrix", "http://www.intranet.com/pingscan/update_device.asp?ID=")
+	
+	'MAC CSV (aka OUI.CSV)
+	ConsistencyMAC = "B827EB" 'Used to test CSV file
+	Response = msgbox("Would you like to set up the MAC address CSV to be download automatically on a reoccurring basis?", vbYesNo) 'Ask whether we should download
+	if Response = vbYes then
+		OUIURL = inputbox("Enter the URL where we can download the current MAC ""database"" in CSV format:", "Software Matrix", "http://standards-oui.ieee.org/oui/oui.csv")
+		OUIDaysToUpdate = inputbox("Enter how often (amount of days) to check for an updated CSV file from the website provided:", "Software Matrix", "30")
+		OUIUpdateAfter = format(Date() + OUIDaysToUpdate, "YYYYMMDD") 'calculate date based on days
+	else
+		OUIURL = "http://standards-oui.ieee.org/oui/oui.csv"
+		OUIDaysToUpdate = 0
+		OUIUpdateAfter = ""
+		
+		Response = msgbox("You've chosen not to update on a regular bases. Would you like to download it one time now from " & OUIURL & "?", vbYesNo) 'download once?
+		if Response = vbYes then
+			xmlhttp.open "get", OUIURL, false
+			xmlhttp.send
+			WPData = xmlhttp.responseText
+			WriteUTF strCurDir & "\oui.csv", WPData
+			if instr(1,WPData,ConsistencyMAC,1) = 0 then msgbox "Consistency check on the CSV failed. Please verify that the data looks correct at: " & strCurDir & "\oui.csv"
+		end if
+	end if
 	
 	'Write the data to INI file
 	WriteIni strCurDir & "\psapp.ini", "Database", "CSVPath", CSVPath
@@ -76,6 +105,10 @@ else
 	WriteIni strCurDir & "\psapp.ini", "LocationSpecific", "SubnetEnd", SubnetEnd
 	WriteIni strCurDir & "\psapp.ini", "LocationSpecific", "DaysBeforeUntrusted", DaysBeforeUntrusted
 	WriteIni strCurDir & "\psapp.ini", "WebGUI", "EditURL", EditURL
+	WriteIni strCurDir & "\psapp.ini", "MACCSV", "ConsistencyMAC", ConsistencyMAC
+	WriteIni strCurDir & "\psapp.ini", "MACCSV", "OUIURL", OUIURL
+	WriteIni strCurDir & "\psapp.ini", "MACCSV", "OUIUpdateAfter", OUIUpdateAfter
+	WriteIni strCurDir & "\psapp.ini", "MACCSV", "OUIDaysToUpdate", OUIDaysToUpdate
 end if
 
 'Check to see if MAC address table exists and if so, use it
@@ -87,21 +120,30 @@ else
 end if
 
 'If option is selected, check the MAC address CSV for updates
-if OIUdata <> "" then
-	xmlhttp.open "get", "http://standards-oui.ieee.org/oui/oui.csv", false
+if format(Date(), "YYYYMMDD") => OUIUpdateAfter and OUIDaysToUpdate > 0 then
+	xmlhttp.open "get", OUIURL, false
 	xmlhttp.send
 	WPData = xmlhttp.responseText
 	
 	if replace(WPData,"'","") = OIUdata then
-		msgbox "Awesome!"
+		'msgbox "Awesome!"
 	else
-		msgbox len(OIUdata) & " --> " & len(WPData)
-		msgbox left(WPData,50)
-		WriteUTF strCurDir & "\oui.csv", WPData
+		'msgbox len(OIUdata) & " --> " & len(WPData)
+		'msgbox left(WPData,50)
+		if instr(1,WPData,ConsistencyMAC,1) = 0 then 'Consistency Check
+			outputl = "<html><head> <style>BODY{font-family: Arial; font-size: 10pt;}</style> </head><body> There were consistency errors detected while updating the MAC address CSV on the <b>" & _ 
+				Building & "</b> network. Please make sure that the URL """ & OUIURL & """ is accessible from the server at that location. Updating has been delayed for another " & OUIDaysToUpdate &  " days"
+			SendMail RptToEmail, "PingScan - OUI CSV Update Failure"
+			outputl = ""
+		else 'Success, update CSV
+			WriteUTF strCurDir & "\oui.csv", WPData
+		end if
 	end if
+	
+	WriteIni strCurDir & "\psapp.ini", "MACCSV", "OUIUpdateAfter", format(Date() + OUIDaysToUpdate, "YYYYMMDD")
 end if
 
-msgbox "This is the last stop"
+'msgbox "This is the last stop"
 
 'Make Powershell Script and run it
 MakePSScript
