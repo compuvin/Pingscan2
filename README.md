@@ -10,3 +10,5 @@ If any changes need to be made to the setup, the psapp.ini file that is created 
 So this is really version 2.0 of a program that I designed years ago to catch people hopping onto an open Wi-Fi. There is a custom ASP web interface that I designed for it which I hope to convert and make it public at some point.
 
 I'll include a blank database or a way to create it in the near future.
+
+*Can now be set to download the MAC address CSV file automatically*
