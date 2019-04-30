@@ -11,6 +11,9 @@ Dim rs
 Dim str
 Dim i 'Counter
 Dim Response 'For answers to prompts
+Dim PSSchema, PSTbl 'Define schema and table names
+PSSchema = "pingscan"
+PSTbl = "pingscan2"
 
 outputl = ""
 
@@ -52,6 +55,9 @@ else
 	DBLocation = inputbox("Enter the IP address or hostname for the location of the database:", "Software Matrix", "localhost")
 	DBUser = inputbox("Enter the user name to access database on " & DBLocation & ":", "Software Matrix", "user")
 	DBPass = inputbox("Enter the password to access database on " & DBLocation & ":", "Software Matrix", "P@ssword1")
+	
+	'Check to see if DB exists
+	CheckForTables
 	
 	'Email - Defaults to anonymous login
 	RptToEmail = inputbox("Enter the report email's To address:", "Software Matrix", "admin@company.com")
@@ -160,7 +166,7 @@ CSVdata = right(CSVdata,len(CSVdata)-81)
 Set adoconn = CreateObject("ADODB.Connection")
 Set rs = CreateObject("ADODB.Recordset")
 adoconn.Open "Driver={MySQL ODBC 8.0 ANSI Driver};Server=" & DBLocation & ";" & _
-			"Database=pingscan; User=" & DBUser & "; Password=" & DBPass & ";"
+			"Database=" & PSSchema & "; User=" & DBUser & "; Password=" & DBPass & ";"
 
 Check_Down_Hosts 'Check first to see if any reported hosts that were up are now down
 Get_PingScan_Data 'Read the CSV file and compare if to the database
@@ -172,7 +178,7 @@ filesys.DeleteFile CSVPath, force
 
 
 Function Check_Down_Hosts()
-	str = "Select * from pingscan2 where PingStatus='Y' and LocalBuilding='" & Building & "' order by PingMAC;"
+	str = "Select * from " & PSTbl & " where PingStatus='Y' and LocalBuilding='" & Building & "' order by PingMAC;"
 	rs.CursorLocation = 3 'adUseClient
 	rs.Open str, adoconn, 3, 3 'OpenType, LockType
 	
@@ -228,7 +234,7 @@ Function Get_PingScan_Data()
 			SendMail RptToEmail, "PingScan - Unknown MAC Address for Device"
 			outputl = ""
 		elseif instr(1,PingExceptions,PingMAC,1) = 0 then 'Ignore any device exceptions
-			str = "Select * from pingscan2 where PingMAC='" & PingMAC & "';"
+			str = "Select * from " & PSTbl & " where PingMAC='" & PingMAC & "';"
 			rs.CursorLocation = 3 'adUseClient
 			rs.Open str, adoconn, 3, 3 'OpenType, LockType
 			
@@ -286,7 +292,7 @@ Function Get_PingScan_Data()
 					HWType = "Unknown"
 				end if
 				
-				str = "INSERT INTO pingscan2(PingMAC,PingIP,HostName,HWType,FirstDate,LastDate,LastTime,PingStatus,HWTrusted,LocalBuilding,NearPhone) values('" & PingMAC & "','" & PingIPAdd & "','" & PingHost & "','" & HWType & "','" & format(date(), "YYYY-MM-DD") & "','" & format(date(), "YYYY-MM-DD") & "','" & format(Time, "HH:MM:SS") & "','Y','N','" & Building & "','');"
+				str = "INSERT INTO " & PSTbl & "(PingMAC,PingIP,HostName,HWType,FirstDate,LastDate,LastTime,PingStatus,HWTrusted,LocalBuilding,NearPhone) values('" & PingMAC & "','" & PingIPAdd & "','" & PingHost & "','" & HWType & "','" & format(date(), "YYYY-MM-DD") & "','" & format(date(), "YYYY-MM-DD") & "','" & format(Time, "HH:MM:SS") & "','Y','N','" & Building & "','');"
 				adoconn.Execute(str)
 				
 				if EditURL = "" then
@@ -311,7 +317,7 @@ Function Get_PingScan_Data()
 End Function
 
 Function Mark_Untrusted_Hosts()
-	str = "Select * from pingscan2 where HWTrusted='Y' and LocalBuilding='" & Building & "' and LastDate < '" & format(date()-DaysBeforeUntrusted, "YYYY-MM-DD") & "' order by PingIP;"
+	str = "Select * from " & PSTbl & " where HWTrusted='Y' and LocalBuilding='" & Building & "' and LastDate < '" & format(date()-DaysBeforeUntrusted, "YYYY-MM-DD") & "' order by PingIP;"
 	rs.CursorLocation = 3 'adUseClient
 	rs.Open str, adoconn, 3, 3 'OpenType, LockType
 	
@@ -555,6 +561,7 @@ Function Format(vExpression, sFormat)
 	  else
 	    nExpression = replace(nExpression,"HH",right("00" & hour(vExpression),2)) '2 character hour
 	    nExpression = replace(nExpression,"H",hour(vExpression)) '1 character hour
+		if int(hour(vExpression)) = 12 then nExpression = replace(nExpression,"AM/PM","PM") '12 noon is PM while anything else in this section is AM (fixed 04/19/2019 thanks to our HR Dept.)
 		nExpression = replace(nExpression,"AM/PM","AM") 'If its not PM, its AM
 	  end if
 	  nExpression = replace(nExpression,":MM",":" & right("00" & minute(vExpression),2)) '2 character minute
@@ -847,3 +854,62 @@ Sub WriteIni( myFilePath, mySection, myKey, myValue ) 'Thanks to http://www.robv
     Set objNewIni = Nothing
     Set objFSO    = Nothing
 End Sub
+
+'Check to see if database and tables exist
+Function CheckForTables()
+	Dim CreatePS2DB 'Boolean for DB creation
+	CreatePS2DB = False
+	
+	Set adoconn = CreateObject("ADODB.Connection")
+	Set rs = CreateObject("ADODB.Recordset")
+	adoconn.Open "Driver={MySQL ODBC 8.0 ANSI Driver};Server=" & DBLocation & ";" & _
+			"User=" & DBUser & "; Password=" & DBPass & ";"
+			
+	str = "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '" & PSSchema & "'"
+	rs.CursorLocation = 3 'adUseClient
+	rs.Open str, adoconn, 2, 1 'OpenType, LockType
+	
+	if rs.eof then
+		Response = msgbox("The database does not exist. Would you like to create it now? (Make sure the user """ & DBUser & """ has permission to do so)", vbYesNo)
+		if Response = vbYes then
+			CreatePS2DB = True
+		else
+			WScript.Quit
+		end if
+		rs.close
+	else
+		'msgbox "DB exists"
+		rs.close
+		
+		'Double check to make sure table is also there
+		str = "SELECT * FROM information_schema.tables WHERE table_schema = '" & PSSchema & "' AND table_name = '" & PSTbl & "' LIMIT 1;"
+		rs.Open str, adoconn, 2, 1 'OpenType, LockType
+	
+		if rs.eof then
+			Response = msgbox("The database exists but the table does not exist. Would you like to create it now?", vbYesNo)
+			if Response = vbYes then
+				CreatePS2DB = True
+			else
+				WScript.Quit
+			end if
+			rs.close
+		else
+			'msgbox "Table exists"
+			rs.close
+		end if
+	end if
+	
+	'Create schema and/or table if needed
+	if CreatePS2DB = True then
+		'Create schema if not there
+		str = "CREATE DATABASE IF NOT EXISTS " & PSSchema & ";"
+		adoconn.Execute(str)
+		
+		'Create table
+		str = "CREATE TABLE " & PSSchema & "." & PSTbl & " (ID INT PRIMARY KEY AUTO_INCREMENT, PingMAC TEXT, PingIP TEXT, HostName TEXT, HWType TEXT, FirstDate DATE,  LastDate DATE, LastTime TEXT, PingStatus TINYTEXT, HWTrusted TINYTEXT, LocalBuilding TEXT, NearPhone TEXT);"
+		adoconn.Execute(str)
+	end if
+	
+	Set adoconn = Nothing
+	Set rs = Nothing
+End Function
