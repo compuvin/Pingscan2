@@ -51,36 +51,36 @@ else
 	msgbox "INI file not found at: " & strCurDir & "\psapp.ini" & vbCrlf & "You will now be prompted with questions to create it."
 	
 	'Database
-	CSVPath = inputbox("Enter the location where the PingScan data should be saved during processing (UNC path recommended):", "Software Matrix", strCurDir & "\PingScan.csv")
-	DBLocation = inputbox("Enter the IP address or hostname for the location of the database:", "Software Matrix", "localhost")
-	DBUser = inputbox("Enter the user name to access database on " & DBLocation & ":", "Software Matrix", "user")
-	DBPass = inputbox("Enter the password to access database on " & DBLocation & ":", "Software Matrix", "P@ssword1")
+	CSVPath = inputbox("Enter the location where the PingScan data should be saved during processing (UNC path recommended):", "PingScan 2.0", strCurDir & "\PingScan.csv")
+	DBLocation = inputbox("Enter the IP address or hostname for the location of the database:", "PingScan 2.0", "localhost")
+	DBUser = inputbox("Enter the user name to access database on " & DBLocation & ":", "PingScan 2.0", "user")
+	DBPass = inputbox("Enter the password to access database on " & DBLocation & ":", "PingScan 2.0", "P@ssword1")
 	
 	'Check to see if DB exists
 	CheckForTables
 	
 	'Email - Defaults to anonymous login
-	RptToEmail = inputbox("Enter the report email's To address:", "Software Matrix", "admin@company.com")
-	RptFromEmail = inputbox("Enter the report email's From address:", "Software Matrix", "admin@company.com")
-	EmailSvr = inputbox("Enter the FQDN or IP address of email server:", "Software Matrix", "mail.server.com")
+	RptToEmail = inputbox("Enter the report email's To address:", "PingScan 2.0", "admin@company.com")
+	RptFromEmail = inputbox("Enter the report email's From address:", "PingScan 2.0", "admin@company.com")
+	EmailSvr = inputbox("Enter the FQDN or IP address of email server:", "PingScan 2.0", "mail.server.com")
 	msgbox "Additional email settings found in Function SendMail()"
 	
 	'Location Specific information for scanning
-	Building = inputbox("Enter the location (or building) of this scanner:", "Software Matrix", "Main Office")
-	SubnetDotZero = inputbox("Enter the subnet IP address to scan ending in zero (0):", "Software Matrix", "192.168.1.0")
-	SubnetStart = inputbox("Enter the first IP to scan (last octet only):", "Software Matrix", "1")
-	SubnetEnd = inputbox("Enter the last IP to scan (last octet only):", "Software Matrix", "254")
-	DaysBeforeUntrusted = inputbox("Enter the amount of days before a trusted computer is considered untrusted:", "Software Matrix", "7")
+	Building = inputbox("Enter the location (or building) of this scanner:", "PingScan 2.0", "Main Office")
+	SubnetDotZero = inputbox("Enter the subnet IP address to scan ending in zero (0):", "PingScan 2.0", "192.168.1.0")
+	SubnetStart = inputbox("Enter the first IP to scan (last octet only):", "PingScan 2.0", "1")
+	SubnetEnd = inputbox("Enter the last IP to scan (last octet only):", "PingScan 2.0", "254")
+	DaysBeforeUntrusted = inputbox("Enter the amount of days before a trusted computer is considered untrusted:", "PingScan 2.0", "7")
 	
 	'WebGUI
-	EditURL = inputbox("Enter the URL to be used for editing a devices details (public version not available yet so this can be left blank):", "Software Matrix", "http://www.intranet.com/pingscan/update_device.asp?ID=")
+	EditURL = inputbox("Enter the URL to be used for editing a devices details (public version not available yet so this can be left blank):", "PingScan 2.0", "http://www.intranet.com/pingscan/update_device.asp?ID=")
 	
 	'MAC CSV (aka OUI.CSV)
 	ConsistencyMAC = "B827EB" 'Used to test CSV file
 	Response = msgbox("Would you like to set up the MAC address CSV to be download automatically on a reoccurring basis?", vbYesNo) 'Ask whether we should download
 	if Response = vbYes then
-		OUIURL = inputbox("Enter the URL where we can download the current MAC ""database"" in CSV format:", "Software Matrix", "http://standards-oui.ieee.org/oui/oui.csv")
-		OUIDaysToUpdate = inputbox("Enter how often (amount of days) to check for an updated CSV file from the website provided:", "Software Matrix", "30")
+		OUIURL = inputbox("Enter the URL where we can download the current MAC ""database"" in CSV format:", "PingScan 2.0", "http://standards-oui.ieee.org/oui/oui.csv")
+		OUIDaysToUpdate = inputbox("Enter how often (amount of days) to check for an updated CSV file from the website provided:", "PingScan 2.0", "30")
 		OUIUpdateAfter = format(Date() + OUIDaysToUpdate, "YYYYMMDD") 'calculate date based on days
 	else
 		OUIURL = "http://standards-oui.ieee.org/oui/oui.csv"
